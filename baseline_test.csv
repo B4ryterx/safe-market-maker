@@ -1,0 +1,6 @@
+name,hours,fills,taker_fills,volume,total,spread,adverse,inventory,check,fees,end_inv,max_inv,breaches,pct_time_at_limit,overrides,after_fees
+join the best bid and ask,6.0,1886,0,54184,1.25,4.809,-1.821,-1.738,-0.0,0.0,-0.00987424,0.00999568,0,52.9,10096,1.25
+"textbook, default settings",6.0,3532,0,98140,-1.606,1.454,-2.492,-0.567,0.0,0.0,-0.00873745,0.00999669,0,39.6,7561,-1.606
+"textbook, tuned (g0.02 k0.5 a1.0 passive)",6.0,3422,0,95894,-0.644,2.882,-1.981,-1.545,0.0,0.0,-0.00826113,0.0099994,0,62.6,11953,-0.644
+"tuned, without the imbalance signal",6.0,3394,0,95118,-0.76,2.858,-1.913,-1.705,0.0,0.0,-0.00836258,0.00999917,0,61.5,11736,-0.76
+"tuned, at standard fees (10 bps maker, 20 taker)",6.0,3422,0,95894,-0.644,2.882,-1.981,-1.545,0.0,95.894,-0.00826113,0.0099994,0,62.6,11953,-96.538
