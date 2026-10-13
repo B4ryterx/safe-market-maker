@@ -25,6 +25,38 @@ limit 0.01 BTC (10 orders), zero maker fee.
   first-generation policy scored about −$714 without a guard and about −$2.50 with one.
 - At Bitfinex's standard 10 bps maker fee every bot loses heavily. The edge is about 0.5 bps of volume.
 
+## Second test: a further 24 hours
+
+A third recording, made after everything above was fixed: 24 hours with nine short disconnections, 21.6 hours of
+data, 3.44 million order updates, 39,115 trades, all 29,397 exchange checksums matched. No bot was retuned. The
+price rose 1.2% over the day and every bot lost money.
+
+| Bot | Fills | Spread earned | Adverse selection | Inventory | Total | Mean inventory (orders) | Time at limit |
+|---|---|---|---|---|---|---|---|
+| Simple: join best bid and ask | 10,230 | +$31.58 | −$28.76 | −$11.24 | −$8.41 | 7.9 | 49% |
+| Avellaneda–Stoikov, tuned | 14,432 | +$15.41 | −$31.69 | −$11.45 | −$27.73 | 8.3 | 59% |
+| Learned, no guard | 15,020 | +$42.32 | −$36.86 | −$8.08 | −$2.61 | 4.1 | 8% |
+| Learned + hard cap | 14,109 | +$39.66 | −$35.00 | −$10.20 | −$5.55 | 3.4 | 2.4% |
+| Learned + barrier guard, α = 0.2 | 14,241 | +$39.01 | −$34.32 | −$9.84 | −$5.16 | 3.2 | 0.4% |
+| Learned + barrier guard, α = 0.05 | 13,701 | +$35.83 | −$31.00 | −$7.52 | −$2.69 | 2.3 | 0% |
+| Learned with barrier guard in training | 14,227 | +$39.76 | −$34.37 | −$8.64 | −$3.24 | 2.8 | 0% |
+
+Both held-out recordings together (36 hours recorded, 28 full hourly blocks), for the policy trained with the guard:
+
+| | Simple | Avellaneda–Stoikov | Learned with barrier guard |
+|---|---|---|---|
+| Total profit | −$4.93 | −$27.01 | +$2.46 |
+| Profit per hour | −$0.20 ± 0.34 | −$0.99 ± 0.39 | +$0.05 ± 0.12 |
+| Mean inventory (orders) | 8.2 | 8.6 | 2.6 |
+
+- **What held up:** the learned policy carries 69% less inventory than the tuned textbook bot, and its hourly profit is
+  less variable. It beats the textbook bot by $1.05 per hour ± $0.37 (t = 2.9).
+- **What did not:** its profit is about zero, not positive, and its lead over the simple bot is $0.26 per hour ± $0.33
+  (t = 0.8), which is not distinguishable from zero. The first test's $0.48 per hour did not repeat.
+- **The guard earned its place on this day.** The policy with no guard went to 3.8 times the inventory limit and spent
+  68 minutes over it. Every guarded version stayed inside, at a cost of $0.08 to $2.94 depending on the guard.
+- Standard errors treat hourly blocks as independent, which is generous.
+
 ## Method
 
 **Data.** `tools/record_l3.py` records Bitfinex's raw book (every order by id), every trade, and the exchange's own
