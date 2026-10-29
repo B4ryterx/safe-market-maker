@@ -111,6 +111,25 @@ training hours), against the fixed barrier on the same policy, hour by hour:
 - Caveat: two reference levels were tried on the test data, so the median result carries a mild selection effect.
   The six policies share the same market hours, so the six comparisons are not independent.
 
+## Choosing the generation
+
+The two weak seeds above both kept generation 0, after one update. I retrained the five guard-trained seeds saving
+every generation (`seeds_hist/`), then compared four selection rules with the fixed barrier on the 28 held-out hours
+(`select_gen.py`):
+
+| Rule | Total profit, seeds 1–5 | Mean | Range |
+|---|---|---|---|
+| A. Best on the 4-hour validation window (published rule) | −5.46, +4.13, −2.63, +3.32, +3.19 | +$0.51 | $9.59 |
+| B. Last generation | +4.23, +1.00, +2.19, +3.05, +4.27 | +$2.95 | $3.27 |
+| C. Average of the last ten generations' weights | +3.26, +2.26, +2.36, +2.86, +3.17 | +$2.78 | $1.00 |
+| D. Best on validation, generation 5 or later | +3.45, +4.13, +2.88, +3.32, +3.19 | +$3.39 | $1.25 |
+
+- Any rule that avoids the barely trained early policies makes all five seeds profitable on held-out data, with
+  mean inventory about 2.5 orders.
+- Rule C uses no validation data at all and gives the tightest spread, so it is the new default.
+- Caveats: the rules were written after seeing that seeds 1 and 3 picked generation 0. Even the best seed only beats the
+  simple bot at t = 0.99.
+
 ## Method
 
 **Data.** `tools/record_l3.py` records Bitfinex's raw book (every order by id), every trade, and the exchange's own

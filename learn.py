@@ -65,7 +65,7 @@ if __name__ == "__main__":
     rng = np.random.default_rng(int(sys.argv[3]) if len(sys.argv) > 3 else 0)
     mean, std = np.zeros(2 * F), np.full(2 * F, 1.0)
     POP, ELITE, GENS = 96, 16, 25
-    best = dict(val=-1e9)
+    best = dict(val=-1e9); hist = []
     log = open(f"train_{name}.log", "w")
     for gen in range(GENS):
         tic = time.time()
@@ -78,4 +78,5 @@ if __name__ == "__main__":
         msg = f"gen {gen:2d} | train best {J.max():+.2f} median {np.median(J):+.2f} | mean policy on validation {Jv[0]:+.2f} (profit {rv[0]['total']:+.2f}, fills {rv[0]['fills']}) | {time.time() - tic:.0f}s"
         print(msg, flush=True); log.write(msg + "\n"); log.flush()
         json.dump(best, open(f"policy_{name}.json", "w"))
+        hist.append(dict(gen=gen, val=float(Jv[0]), train_median=float(np.median(J)), weights=mean.tolist())); json.dump(hist, open(f"history_{name}.json", "w"))
     print("chosen generation", best["gen"], "validation objective", round(best["val"], 3))
