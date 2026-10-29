@@ -8,16 +8,18 @@ Objective: profit minus ETA x sum over seconds of (inventory in order units)^2.
 
 Data: recording 1, first 8 hours = training; recording 1, last 4 hours = validation (picks the generation);
 recording 2 is never seen here.
-Usage: learn.py <name> [none|cap|cbf]      guard used during training
+Usage: learn.py <name> [none|cap|cbf|cbfvol] [seed]      guard used during training; seed defaults to 0
 """
 import json, os, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
-from sim import Market, Trader, hard_cap, make_cbf
+from sim import Market, Trader, hard_cap, make_cbf, make_cbf_vol
 
 ETA = 2e-6
+REF_SD = 2.36                 # 90th percentile of the 5-minute std of 1-second mid changes, recording 1 training hours
+TICK_DOLLARS = [1.0]          # BTCUSD; set to [0.1] for ETHUSD (and sim.TICK to match)
 F = 6
-REC1 = "data/btcusd_l3.csv"
+REC1 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data/btcusd_l3.csv")
 
 
 def span(path):
@@ -40,12 +42,13 @@ class Population:
     def assign(self, base):
         x = self.x
         x[:, 0] = [t.inv for t in self.traders]; x[:, 0] /= self.Q
-        x[:, 1] = base["imbalance"]; x[:, 2] = np.tanh(base["mom"] / 3.0)
-        x[:, 3] = min(base["spread"], 5.0) / 5.0; x[:, 4] = min(base["var"] ** 0.5, 3.0) / 3.0
+        tk = TICK_DOLLARS[0]                       # features in ticks, so one policy shape fits any market
+        x[:, 1] = base["imbalance"]; x[:, 2] = np.tanh(base["mom"] / tk / 3.0)
+        x[:, 3] = min(base["spread"] / tk, 5.0) / 5.0; x[:, 4] = min(base["var"] ** 0.5 / tk, 3.0) / 3.0
         off = np.clip(np.rint(np.einsum("nkf,nf->nk", self.w, x)), -1, 4)
         bid, ask = base["bid"], base["ask"]
         for t, (ob, oa) in zip(self.traders, off):
-            t.act = (None if ob >= 4 else bid - ob, None if oa >= 4 else ask + oa)
+            t.act = (None if ob >= 4 else bid - ob * tk, None if oa >= 4 else ask + oa * tk)
 
 
 def evaluate(weights, path, t_from=None, t_to=None, guard=None, max_inv=0.01):
@@ -56,10 +59,10 @@ def evaluate(weights, path, t_from=None, t_to=None, guard=None, max_inv=0.01):
 
 if __name__ == "__main__":
     name, guard_name = sys.argv[1], (sys.argv[2] if len(sys.argv) > 2 else "none")
-    guard = {"none": None, "cap": hard_cap, "cbf": make_cbf(0.2)}[guard_name]
+    guard = {"none": None, "cap": hard_cap, "cbf": make_cbf(0.2), "cbfvol": make_cbf_vol(0.2, ref_sd=REF_SD)}[guard_name]
     max_inv = 1.0 if guard is None else 0.01          # no guard: the limit is not enforced, only counted
     t0, t1 = span(REC1); t_val = t0 + 8 * 3600 * 1000
-    rng = np.random.default_rng(0)
+    rng = np.random.default_rng(int(sys.argv[3]) if len(sys.argv) > 3 else 0)
     mean, std = np.zeros(2 * F), np.full(2 * F, 1.0)
     POP, ELITE, GENS = 96, 16, 25
     best = dict(val=-1e9)

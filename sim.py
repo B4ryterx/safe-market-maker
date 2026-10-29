@@ -27,8 +27,10 @@ VAR_WINDOW = 300               # seconds of mid changes in the volatility estima
 
 
 class Quote:
-    __slots__ = ("price", "rem", "ahead")
-    def __init__(self, price, rem, ahead): self.price, self.rem, self.ahead = price, rem, ahead
+    __slots__ = ("price", "rem", "ahead", "live", "dead")
+    def __init__(self, price, rem, ahead, live=0, dead=float("inf")):
+        self.price, self.rem, self.ahead, self.live, self.dead = price, rem, ahead, live, dead
+    def on(self, ts): return self.rem > 0 and self.live <= ts < self.dead
 
 
 class Trader:
@@ -37,6 +39,7 @@ class Trader:
         self.name, self.agent, self.size, self.max_inv = name, agent, int(size * U), int(max_inv * U)
         self.cross, self.taker_fee, self.maker_fee, self.guard = cross_at_limit, taker_fee_bps / 1e4, maker_fee_bps / 1e4, guard
         self.q = {1: None, -1: None}
+        self.old = {1: None, -1: None}   # with latency: the replaced quote, still live until its cancel lands
         self.inv, self.cash, self.fees = 0, 0.0, 0.0
         self.fills = []                # (ts, side, price, qty, mid, taker)
         self.max_abs_inv, self.breaches, self.steps_at_limit, self.overrides = 0, 0, 0, 0
@@ -53,8 +56,11 @@ class Trader:
 
 
 class Market:
-    def __init__(self, traders, step_ms=1000, t_from=None, t_to=None, batch=None):
+    def __init__(self, traders, step_ms=1000, t_from=None, t_to=None, batch=None, latency_ms=0, through_only=False):
+        """latency_ms: a new quote, a re-price or a cancel takes effect this long after the decision (the old quote
+        can still fill meanwhile). through_only: pessimistic queue, fill only when a trade prints through our price."""
         self.traders, self.step_ms, self.t_from, self.t_to, self.batch = traders, step_ms, t_from, t_to, batch
+        self.latency, self.through_only = latency_ms, through_only
         self.orders = {}                                   # id -> [price, signed amount]
         self.lv = {1: SortedDict(), -1: SortedDict()}      # side -> price -> {id: size}; dict order = arrival order
         self.pending = deque()                             # trade prints awaiting their book change: [ts, price, qty, side]
@@ -79,19 +85,23 @@ class Market:
         self.orders[oid] = [price, amt]
         self.lv[1 if amt > 0 else -1].setdefault(price, {})[oid] = abs(amt)
 
-    def _fill(self, tr, ts, side, qty):
-        q = tr.q[side]; qty = min(qty, q.rem)
-        if qty <= 0: return
+    def _live(self, tr, side, ts):
+        return [q for q in (tr.old[side], tr.q[side]) if q is not None and q.on(ts)]
+
+    def _fill(self, tr, ts, side, qty, q):
+        qty = min(qty, q.rem)
+        if qty <= 0: return 0
         q.rem -= qty
         tr.book_fill(ts, side, q.price, qty, self.mid_now)
-        if q.rem == 0: tr.q[side] = None
+        return qty
 
     def _on_trade(self, ts, price, amt):
         side = -1 if amt > 0 else 1            # resting side that was hit: a buy aggressor hits asks
         for tr in self.traders:
-            q = tr.q[side]
-            if q and ((side == 1 and price < q.price) or (side == -1 and price > q.price)):
-                self._fill(tr, ts, side, abs(amt))          # printed through our price
+            left = abs(amt)
+            for q in self._live(tr, side, ts):
+                if (side == 1 and price < q.price) or (side == -1 and price > q.price):
+                    left -= self._fill(tr, ts, side, left, q)          # printed through our price
         self.pending.append([ts, price, abs(amt), side])
 
     def _on_reduction(self, ts, oid, price, side, dq, gone):
@@ -105,12 +115,12 @@ class Market:
         if traded:
             self.pending = deque(p for p in self.pending if p[2] > 1)
         for tr in self.traders:
-            q = tr.q[side]
-            if not q: continue
-            if oid in q.ahead:
-                if gone: q.ahead.discard(oid)
-            elif traded and price == q.price:
-                self._fill(tr, ts, side, traded)             # an order behind us traded: we would have traded first
+            for q in (tr.old[side], tr.q[side]):
+                if q is None: continue
+                if oid in q.ahead:
+                    if gone: q.ahead.discard(oid)
+                elif traded and price == q.price and q.on(ts) and not self.through_only:
+                    self._fill(tr, ts, side, traded, q)      # an order behind us traded: we would have traded first
 
     def _step(self, ts):
         b, a = self.best(1), self.best(-1)
@@ -138,13 +148,18 @@ class Market:
             bid, ask = tr.act if tr.act is not None else tr.agent(state)
             sb = sa = tr.size
             if tr.guard: bid, ask, sb, sa = tr.guard(tr, state, bid, ask)
-            pb = None if bid is None else min(int(math.floor(bid)) * U, a - TICK)     # passive only: never cross
-            pa = None if ask is None else max(int(math.ceil(ask)) * U, b + TICK)
+            pb = None if bid is None else min(int(math.floor(bid * U / TICK)) * TICK, a - TICK)     # passive only: never cross
+            pa = None if ask is None else max(int(math.ceil(ask * U / TICK)) * TICK, b + TICK)
+            lat = self.latency
             for side, price, sz in ((1, pb, sb), (-1, pa, sa)):
                 cur = tr.q[side]
+                if cur is not None and cur.rem <= 0: cur = tr.q[side] = None
+                if cur and price is not None and sz * 10 >= tr.size and cur.price == price:
+                    cur.rem = min(cur.rem, sz); continue                              # unchanged quote keeps its queue place
+                if cur is not None and lat:                                           # its cancel lands lat ms from now
+                    cur.dead = min(cur.dead, ts + lat); tr.old[side] = cur
                 if price is None or sz * 10 < tr.size: tr.q[side] = None             # no quote, or guard cut it to nothing
-                elif cur and cur.price == price and cur.rem > 0: cur.rem = min(cur.rem, sz)   # unchanged quote keeps its queue place
-                else: tr.q[side] = Quote(price, sz, set(self.lv[side].get(price, ())))
+                else: tr.q[side] = Quote(price, sz, set(self.lv[side].get(price, ())), live=ts + lat)
 
     def run(self, path):
         active_before = False
@@ -175,7 +190,7 @@ class Market:
                     if active_before and self.mid_now: self._on_trade(ts, int(p[2]), int(p[3]))
                 elif k == "S":                                               # reconnect: fresh book, our quotes are gone
                     self.orders.clear(); self.lv[1].clear(); self.lv[-1].clear(); self.pending.clear()
-                    for tr in self.traders: tr.q = {1: None, -1: None}
+                    for tr in self.traders: tr.q = {1: None, -1: None}; tr.old = {1: None, -1: None}
                     continue
                 else:
                     continue
@@ -183,7 +198,7 @@ class Market:
                 if active and (self.next_step is None or ts >= self.next_step):
                     self._step(ts); self.next_step = ts + self.step_ms
                 if active_before and not active:
-                    for tr in self.traders: tr.q = {1: None, -1: None}
+                    for tr in self.traders: tr.q = {1: None, -1: None}; tr.old = {1: None, -1: None}
                 active_before = active
         return [self.report(tr) for tr in self.traders]
 
@@ -239,6 +254,23 @@ def make_cbf(alpha=0.2):
         Q, q = tr.max_inv, tr.inv
         bound = math.sqrt(alpha * Q * Q + (1 - alpha) * q * q)
         sb, sa = min(tr.size, int(bound - q)), min(tr.size, int(bound + q))
+        if sb < tr.size or sa < tr.size: tr.overrides += 1
+        return bid, ask, max(sb, 0), max(sa, 0)
+    return guard
+
+
+def make_cbf_vol(alpha=0.2, ref_sd=None, floor=0.5):
+    """Volatility-aware barrier: the same safe set h = Qe^2 - q^2 >= 0, but the limit Qe shrinks when the market
+    is jumpier than usual, Qe = Q * clip(ref_sd / sd, floor, 1), sd = rolling std of one-second mid changes.
+    When Qe falls below |q| the bound only lets the position shrink (the risky side is cut to zero), so the guard
+    unwinds through passive fills rather than forcing a trade. ref_sd = typical sd on training data."""
+    def guard(tr, state, bid, ask):
+        sd = math.sqrt(state["var"]); Q = tr.max_inv
+        if ref_sd and sd > 0: Q = Q * min(1.0, max(floor, ref_sd / sd))
+        q = tr.inv
+        bound = math.sqrt(max(alpha * Q * Q + (1 - alpha) * q * q, 0.0))
+        sb = min(tr.size, int(bound - q)) if q < Q else 0
+        sa = min(tr.size, int(bound + q)) if q > -Q else 0
         if sb < tr.size or sa < tr.size: tr.overrides += 1
         return bid, ask, max(sb, 0), max(sa, 0)
     return guard

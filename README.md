@@ -57,6 +57,60 @@ Both held-out recordings together (36 hours recorded, 28 full hourly blocks), fo
   68 minutes over it. Every guarded version stayed inside, at a cost of $0.08 to $2.94 depending on the guard.
 - Standard errors treat hourly blocks as independent, which is generous.
 
+## Stress tests (29 October): seeds, latency, queue model, fees
+
+All on the two held-out recordings together (28 full hours). `stress.py <scenario>` and `volguard.py [latency_ms]`
+reproduce every number; results are in `stress_*.csv` and `volguard*.csv`.
+
+**Five more training runs per variant** (`learn.py <name> <guard> <seed>`, policies in `seeds/`). Total profit over 28 h:
+
+| Variant | Published run | Seeds 1–5 | Seconds over the limit |
+|---|---|---|---|
+| Trained with the barrier guard | +$2.46 | −5.46, +4.13, −2.63, +3.32, +3.19 | 0 in every run |
+| Trained with no guard | +$2.79 | +0.97, +3.27, +6.75, +6.32, +3.48 | 2,898 to 10,619 (up to 4.6× the limit) |
+| No-guard policy, guard added at test | +$0.20 | −0.32, +1.22, +5.10, +5.01, +1.13 | 0 in every run |
+
+- Every one of the 18 learned policies beat the tuned textbook bot (t from 1.7 to 2.9) and carried far less inventory.
+- None beat the simple join-the-best-price bot by a statistically clear margin (largest t = 0.87).
+- Two of the five guard-trained seeds (1 and 3) came out worse: twice the inventory and negative profit. Both picked
+  generation 0 on the 4-hour validation window, so **choosing the generation is the weak step**, not the guard.
+
+**Latency and a pessimistic queue** (published guard-trained policy; simple bot for reference):
+
+| Scenario | Learned + guard | Simple | Learned − textbook (t) | Simple bot's worst position |
+|---|---|---|---|---|
+| Published setting | +$2.46 | −$4.93 | +$1.05/h (2.9) | 0.0100 BTC |
+| 250 ms to place or cancel | +$2.03 | −$3.66 | +$1.07/h (3.1) | 0.0108 BTC (over the limit for 302 s) |
+| 1 s to place or cancel | −$1.34 | −$6.87 | +$1.06/h (3.4) | 0.0109 BTC (over the limit for 641 s) |
+| Fill only when a trade prints through our price | −$1.21 | −$11.58 | +$0.93/h (2.4) | 0.0100 BTC |
+
+- **The barrier guard holds the limit under latency and the plain hard cap does not.** The hard cap only stops quoting
+  at the limit, but a cancel that has not yet landed can still fill. The barrier guard sizes quotes for the worst case
+  in advance, so even with 1 s of latency no guarded run went past 0.0097 BTC.
+- One second of latency costs the learned bots about $4 over 28 hours and takes their profit below zero.
+- **Fees decide everything.** At a 1 bps maker fee every bot loses money in every scenario, $36 to $88 over the 28 hours. The edge is a fraction of a basis point.
+
+## A volatility-aware barrier
+
+`make_cbf_vol` in `sim.py`: the same safe set, but the limit shrinks when the market is jumpier than usual,
+Q_eff = Q · clip(σ_ref / σ, 0.5, 1), with σ the 5-minute standard deviation of one-second mid changes. If Q_eff
+drops below the current position, only the reducing side is quoted, so the bot unwinds through passive fills.
+
+Bolted on at test time to the six policies trained with the fixed barrier (σ_ref = $1.18, the median on the
+training hours), against the fixed barrier on the same policy, hour by hour:
+
+| | Profit change over 28 h | Hourly profit volatility | Worst hour |
+|---|---|---|---|
+| No latency | better for 6 of 6 policies (+$1.03 to +$4.92; t 0.6 to 1.7) | 25% to 42% lower | better for 6 of 6 |
+| 1 s latency | better for 6 of 6 policies (+$1.99 to +$7.67; t 1.5 to 3.0) | 15% to 35% lower | better for 6 of 6 |
+
+- The gain is mainly risk: steadier hours and a smaller worst hour. Most of the extra profit comes from the two weak
+  seeds, which the tighter limit rescues.
+- A looser reference (σ_ref = $2.36, the 90th percentile) changed little, and training with the volatility-aware
+  barrier did not beat training with the fixed one.
+- Caveat: two reference levels were tried on the test data, so the median result carries a mild selection effect.
+  The six policies share the same market hours, so the six comparisons are not independent.
+
 ## Method
 
 **Data.** `tools/record_l3.py` records Bitfinex's raw book (every order by id), every trade, and the exchange's own
@@ -102,6 +156,9 @@ python3 tools/record_l3.py data/btcusd_l3_part2.csv 12     # recording 2
 python3 baselines.py                                       # tune and test Avellaneda-Stoikov on recording 1
 python3 learn.py unguarded none && python3 learn.py capped cap && python3 learn.py cbf cbf
 python3 compare.py                                         # the table above
+for s in 1 2 3 4 5; do python3 learn.py cbf_s$s cbf $s; python3 learn.py none_s$s none $s; done   # run inside seeds/
+for s in base lat250 lat1000 through; do python3 stress.py $s; done
+python3 volguard.py && python3 volguard.py 1000
 ```
 
 Needs Python 3 with numpy, pandas and sortedcontainers. Recordings are not in the repository (about 180 MB).
