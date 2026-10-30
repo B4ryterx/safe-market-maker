@@ -10,7 +10,7 @@ Fees are applied afterwards (maker fee x traded notional), so every scenario als
 Bots: simple, textbook (tuned on recording 1, as in compare.py), the published learned policies, and every
 seed policy found in seeds/ (each run with the guard it was trained with; unguarded ones also with the
 barrier guard bolted on at test time).
-Usage: stress.py <scenario> [recording ...]       writes stress_<scenario>.csv and stress_<scenario>_hourly.npz
+Usage: stress.py <scenario> [recording ...]       writes stress_<scenario>[_<recordings>].csv and _hourly.npz
 """
 import glob, itertools, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -22,6 +22,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SCEN = {"base": {}, "lat250": dict(latency_ms=250), "lat1000": dict(latency_ms=1000), "through": dict(through_only=True)}
 scen = sys.argv[1]
 recs = sys.argv[2:] or [f"{HERE}/data/btcusd_l3_part2.csv", f"{HERE}/data/btcusd_l3_part3.csv"]
+tag = "" if len(sys.argv) <= 2 else "_" + "+".join(os.path.basename(r).replace(".csv", "") for r in recs)
 
 
 class Batches:
@@ -78,7 +79,7 @@ for ref in ("simple", "textbook"):
     d = H - H[names.index(ref)]
     summ[f"vs_{ref}"] = d.mean(1).round(3); summ[f"t_vs_{ref}"] = (d.mean(1) / (d.std(1, ddof=1) / np.sqrt(d.shape[1]) + 1e-12)).round(2)
 summ.insert(0, "hours", H.shape[1])
-summ.to_csv(f"{HERE}/stress_{scen}.csv")
-np.savez(f"{HERE}/stress_{scen}_hourly.npz", H=H, names=np.array(names))
+summ.to_csv(f"{HERE}/stress_{scen}{tag}.csv")
+np.savez(f"{HERE}/stress_{scen}{tag}_hourly.npz", H=H, names=np.array(names))
 pd.set_option("display.width", 250)
 print(summ.to_string())

@@ -1,0 +1,26 @@
+name,policy,guard,total,volume,max_inv,mean_inv,overrides,per_hour,hourly_sd,worst_hour,vs_simple,t_vs_simple
+simple,simple,-,-35.839,957390,0.00999832,6.61,20727,-1.748,3.067,-7.13,0.0,0.0
+published | fixed barrier,published,fixed barrier,-39.638,1251832,0.00960606,3.52,12923,-1.881,3.622,-12.4,-0.133,-0.17
+published | vol barrier (median ref),published,vol barrier (median ref),-31.325,1133914,0.00476178,2.07,44333,-1.489,2.656,-9.08,0.259,0.36
+published | vol barrier (p90 ref),published,vol barrier (p90 ref),-31.532,1140018,0.00861907,2.34,38757,-1.499,2.673,-9.08,0.249,0.35
+fixed-trained s1 | fixed barrier,fixed-trained s1,fixed barrier,-53.124,1076107,0.00960962,4.73,28102,-2.485,4.348,-13.83,-0.737,-0.67
+fixed-trained s1 | vol barrier (median ref),fixed-trained s1,vol barrier (median ref),-40.746,885506,0.00611336,2.44,50405,-1.921,2.944,-10.28,-0.173,-0.2
+fixed-trained s1 | vol barrier (p90 ref),fixed-trained s1,vol barrier (p90 ref),-41.19,904328,0.00893869,2.69,45071,-1.941,2.968,-10.28,-0.193,-0.22
+fixed-trained s2 | fixed barrier,fixed-trained s2,fixed barrier,-38.898,1228831,0.00960792,3.3,12208,-1.845,3.736,-12.9,-0.097,-0.11
+fixed-trained s2 | vol barrier (median ref),fixed-trained s2,vol barrier (median ref),-30.587,1103485,0.00462243,1.96,42233,-1.452,2.695,-9.81,0.296,0.39
+fixed-trained s2 | vol barrier (p90 ref),fixed-trained s2,vol barrier (p90 ref),-30.538,1110023,0.00883063,2.15,34991,-1.45,2.706,-9.81,0.298,0.4
+fixed-trained s3 | fixed barrier,fixed-trained s3,fixed barrier,-53.745,939991,0.00960978,5.61,38709,-2.512,4.805,-14.51,-0.764,-0.62
+fixed-trained s3 | vol barrier (median ref),fixed-trained s3,vol barrier (median ref),-40.757,882988,0.00611336,2.44,50455,-1.921,2.958,-10.32,-0.173,-0.2
+fixed-trained s3 | vol barrier (p90 ref),fixed-trained s3,vol barrier (p90 ref),-41.53,892931,0.0088974,2.75,45856,-1.957,2.983,-10.32,-0.209,-0.24
+fixed-trained s4 | fixed barrier,fixed-trained s4,fixed barrier,-40.863,1232041,0.00960732,3.35,12369,-1.933,3.829,-13.29,-0.185,-0.2
+fixed-trained s4 | vol barrier (median ref),fixed-trained s4,vol barrier (median ref),-31.653,1093029,0.00474098,2.01,43216,-1.498,2.732,-9.74,0.25,0.32
+fixed-trained s4 | vol barrier (p90 ref),fixed-trained s4,vol barrier (p90 ref),-31.836,1099922,0.00887241,2.21,36381,-1.503,2.734,-9.74,0.245,0.32
+fixed-trained s5 | fixed barrier,fixed-trained s5,fixed barrier,-39.799,1245274,0.00960687,3.33,11702,-1.885,3.643,-12.58,-0.137,-0.16
+fixed-trained s5 | vol barrier (median ref),fixed-trained s5,vol barrier (median ref),-31.374,1120963,0.00471643,2.01,43379,-1.489,2.613,-9.06,0.26,0.35
+fixed-trained s5 | vol barrier (p90 ref),fixed-trained s5,vol barrier (p90 ref),-30.828,1127648,0.00868347,2.22,36741,-1.463,2.638,-9.06,0.285,0.39
+vol-trained s1 | vol barrier (p90 ref),vol-trained s1,vol barrier (p90 ref),-30.432,1104370,0.00884379,2.14,34901,-1.444,2.758,-10.02,0.304,0.4
+vol-trained s1 | fixed barrier,vol-trained s1,fixed barrier,-38.843,1231308,0.00960798,3.28,12052,-1.836,3.79,-12.98,-0.088,-0.1
+vol-trained s2 | vol barrier (p90 ref),vol-trained s2,vol barrier (p90 ref),-30.592,1034986,0.00898646,2.11,34224,-1.44,2.851,-10.43,0.308,0.37
+vol-trained s2 | fixed barrier,vol-trained s2,fixed barrier,-40.389,1185130,0.00960861,3.52,15636,-1.899,4.025,-13.46,-0.151,-0.15
+vol-trained s3 | vol barrier (p90 ref),vol-trained s3,vol barrier (p90 ref),-31.329,1116112,0.00882792,2.23,36940,-1.487,2.681,-9.56,0.261,0.36
+vol-trained s3 | fixed barrier,vol-trained s3,fixed barrier,-39.287,1235894,0.00960889,3.42,12682,-1.861,3.73,-12.95,-0.113,-0.13

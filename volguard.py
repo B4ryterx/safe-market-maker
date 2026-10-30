@@ -2,7 +2,7 @@
 Compares, on recordings 2 and 3 together: the fixed barrier (alpha 0.2), the volatility-aware barrier with two
 reference levels (median and 90th percentile of training volatility), bolted on at test time to the policies
 trained with the fixed barrier, and policies trained with the volatility-aware barrier itself.
-Usage: volguard.py [latency_ms]. Writes volguard.csv (volguard_lat<ms>.csv with latency) and the hourly profits."""
+Usage: volguard.py [latency_ms] [recording ...]. Writes volguard.csv (volguard_lat<ms>.csv with latency) and the hourly profits."""
 import glob, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np, pandas as pd
@@ -11,7 +11,8 @@ from learn import Population
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LAT = int(sys.argv[1]) if len(sys.argv) > 1 else 0
-RECS = [f"{HERE}/data/btcusd_l3_part2.csv", f"{HERE}/data/btcusd_l3_part3.csv"]
+RECS = sys.argv[2:] or [f"{HERE}/data/btcusd_l3_part2.csv", f"{HERE}/data/btcusd_l3_part3.csv"]
+TAG = "" if len(sys.argv) <= 2 else "_" + "+".join(os.path.basename(r).replace(".csv", "") for r in RECS)
 MED, P90 = 1.18, 2.36
 
 
@@ -52,6 +53,6 @@ s = rep.groupby("name", sort=False).agg(policy=("policy", "first"), guard=("guar
 s["per_hour"] = H.mean(1).round(3); s["hourly_sd"] = H.std(1, ddof=1).round(3)
 s["worst_hour"] = H.min(1).round(2)
 d = H - H[0]; s["vs_simple"] = d.mean(1).round(3); s["t_vs_simple"] = (d.mean(1) / (d.std(1, ddof=1) / np.sqrt(H.shape[1]) + 1e-12)).round(2)
-sfx = f"_lat{LAT}" if LAT else ""
+sfx = (f"_lat{LAT}" if LAT else "") + TAG
 s.to_csv(f"{HERE}/volguard{sfx}.csv"); np.savez(f"{HERE}/volguard{sfx}_hourly.npz", H=H, names=np.array(names))
 pd.set_option("display.width", 250); print(s.drop(columns=["policy", "guard"]).to_string())

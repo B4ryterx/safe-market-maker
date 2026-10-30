@@ -4,7 +4,7 @@ guard-trained seeds (seeds_hist/history_cbf_s*.json), each run with the fixed ba
   B  the last generation
   C  the average of the weights of the last ten generations
   D  best on validation, but only from generation 5 onward
-Writes select_gen.csv."""
+Usage: select_gen.py [recording ...]. Writes select_gen[_<recordings>].csv."""
 import glob, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np, pandas as pd
@@ -12,7 +12,8 @@ from sim import Market, Trader, touch, hard_cap, make_cbf
 from learn import Population
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RECS = [f"{HERE}/data/btcusd_l3_part2.csv", f"{HERE}/data/btcusd_l3_part3.csv"]
+RECS = sys.argv[1:] or [f"{HERE}/data/btcusd_l3_part2.csv", f"{HERE}/data/btcusd_l3_part3.csv"]
+TAG = "" if len(sys.argv) <= 1 else "_" + "+".join(os.path.basename(r).replace(".csv", "") for r in RECS)
 RULES = {"A best validation": lambda h: max(h, key=lambda g: g["val"])["weights"],
          "B last generation": lambda h: h[-1]["weights"],
          "C mean of last 10": lambda h: np.mean([g["weights"] for g in h[-10:]], axis=0).tolist(),
@@ -46,7 +47,7 @@ first = reps[0]
 s = rep.groupby(["rule", "seed"], sort=False).agg(total=("total", "sum"), mean_inv=("mean_abs_inv_units", "mean"), max_inv=("max_inv", "max")).reset_index()
 s["hourly_sd"] = H.std(1, ddof=1).round(3)
 d = H - H[0]; s["vs_simple_t"] = (d.mean(1) / (d.std(1, ddof=1) / np.sqrt(H.shape[1]) + 1e-12)).round(2)
-s.to_csv(f"{HERE}/select_gen.csv", index=False)
+s.to_csv(f"{HERE}/select_gen{TAG}.csv", index=False)
 pd.set_option("display.width", 200); print(s.to_string(index=False))
 print("\nby rule (mean and range of total profit over the five seeds):")
 print(s[s.rule != "simple"].groupby("rule").total.agg(["mean", "min", "max"]).round(2).to_string())

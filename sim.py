@@ -20,8 +20,10 @@ from collections import deque
 
 from sortedcontainers import SortedDict
 
+from instrument import SPEC
+
 U = 10**8                      # file units per 1.0 of price or size
-TICK = 1 * U                   # BTCUSD moves in whole dollars at this price level
+TICK = round(SPEC["tick"] * U)  # BTCUSD moves in whole dollars at this price level, ETHUSD in 10 cents
 HORIZON_MS = 10_000
 VAR_WINDOW = 300               # seconds of mid changes in the volatility estimate
 
@@ -35,7 +37,8 @@ class Quote:
 
 class Trader:
     """One agent's quotes, inventory and fills. agent(state) -> (bid, ask) in dollars, None = no quote."""
-    def __init__(self, name, agent, size=0.001, max_inv=0.01, cross_at_limit=False, taker_fee_bps=0.0, maker_fee_bps=0.0, guard=None):
+    def __init__(self, name, agent, size=None, max_inv=None, cross_at_limit=False, taker_fee_bps=0.0, maker_fee_bps=0.0, guard=None):
+        size = SPEC["size"] if size is None else size; max_inv = SPEC["max_inv"] if max_inv is None else max_inv
         self.name, self.agent, self.size, self.max_inv = name, agent, int(size * U), int(max_inv * U)
         self.cross, self.taker_fee, self.maker_fee, self.guard = cross_at_limit, taker_fee_bps / 1e4, maker_fee_bps / 1e4, guard
         self.q = {1: None, -1: None}
