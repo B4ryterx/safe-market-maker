@@ -3,6 +3,18 @@
 Does a market-making policy found by trial and error beat the textbook formula, and what does a
 barrier-function safety guard cost? Tested on real order-by-order data with queue-aware fills.
 
+## Summary
+
+Across four held-out days (57 hours of real Bitfinex order-by-order data):
+
+- **The safety result holds.** Every bot with the barrier guard stayed inside its inventory limit in every test,
+  including with 1 s of order latency. The plain hard cap did not: under latency it went over the limit for up to
+  641 s on day 3 and 1,595 s on day 4. A volatility-aware version of the barrier beat the fixed barrier on every policy.
+- **The profit result does not.** The learned policy beat the tuned Avellaneda–Stoikov bot consistently, but never
+  the simple join-the-best-price bot by a clear margin, and on the fourth day every bot lost money.
+
+The detail follows, in the order the tests were run.
+
 ## Result
 
 Test set: 12 hours of Bitfinex BTCUSD that no bot saw during tuning. Order size 0.001 BTC, inventory
@@ -130,6 +142,29 @@ every generation (`seeds_hist/`), then compared four selection rules with the fi
 - Caveats: the rules were written after seeing that seeds 1 and 3 picked generation 0. Even the best seed only beats the
   simple bot at t = 0.99.
 
+## Fourth day: a further 21 hours (recorded 29–30 October)
+
+A fourth recording, made after every choice above was fixed, and not used for anything else. No bot was retuned.
+`stress.py`, `volguard.py` and `select_gen.py` take the recording as an argument; outputs carry the suffix
+`_btcusd_l3_part4`.
+
+| Bot | Total, 21 h | Mean inventory (orders) | Seconds over the limit | Same, with 1 s latency |
+|---|---|---|---|---|
+| Simple: join best bid and ask | −$35.84 | 6.6 | 0 | 1,595 |
+| Avellaneda–Stoikov, tuned | −$135.05 | 6.0 | 0 | 1,496 |
+| Learned, no guard | −$106.78 | 10.2 | 21,654 (7.4× the limit) | 17,768 |
+| Learned, guard in training | −$39.64 | 3.5 | 0 | 0 |
+| Seeds 1–5, guard in training | −$53.12 to −$38.90 | 3.3 to 5.6 | 0 | 0 |
+
+- **Every bot lost money.** The learned policies were level with the simple bot (t from −0.7 to −0.1) and well ahead of
+  the textbook bot (t 3.5 to 5.2). The earlier profit did not persist.
+- **The guard held again**, with and without latency, for all eleven guarded policies. Without it, the five no-guard
+  seeds went 5 to 11 times over the limit.
+- **The volatility-aware barrier won again** for all six fixed-barrier policies: published policy −$31.33 vs −$39.64,
+  hourly profit volatility $2.66 vs $3.62, worst hour −$9.08 vs −$12.40.
+- **Rule C (average of the last ten generations) kept the seeds together:** −$37.82 to −$39.83, against −$38.90 to
+  −$53.75 for the published rule A.
+
 ## Method
 
 **Data.** `tools/record_l3.py` records Bitfinex's raw book (every order by id), every trade, and the exchange's own
@@ -161,7 +196,7 @@ The guard leaves the policy alone while these hold, shrinks the risky side near 
 
 ## Limits
 
-- About 24 hours of one thin market (roughly one trade every three to four seconds, median trade under $20).
+- About 57 hours of one thin market (roughly one trade every three to four seconds, median trade under $20).
 - No market impact, no latency, zero fees. The learned policy often improves the best price by one tick; real competitors would respond.
 - Training profit rose from $3 to $8 over generations while validation stayed near $2–2.5, so the policy overfits and an early generation was kept.
 - The test comparison was run once by mistake while training was in progress. Nothing was changed afterwards; generations were chosen on validation data only.
