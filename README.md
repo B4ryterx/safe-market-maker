@@ -13,7 +13,12 @@ Across four held-out days (57 hours of real Bitfinex order-by-order data):
 - **The profit result does not.** The learned policy beat the tuned Avellaneda–Stoikov bot consistently, but never
   the simple join-the-best-price bot by a clear margin, and on the fourth day every bot lost money.
 
-The detail follows, in the order the tests were run.
+- **The guarantee needed one fix.** As first written the barrier's proof assumed no latency. With latency, a quote
+  whose cancel has not landed can still fill; at α = 0.2 that happens to stay inside the limit, but from α = 0.4 it
+  does not. Counting quotes still in flight restores the guarantee for any α, at no cost (see the last section).
+
+The write-up ([WRITEUP.pdf](WRITEUP.pdf)) gives the whole study in three pages. The detail follows, in the order the
+tests were run.
 
 ## Result
 
@@ -165,6 +170,27 @@ A fourth recording, made after every choice above was fixed, and not used for an
 - **Rule C (average of the last ten generations) kept the seeds together:** −$37.82 to −$39.83, against −$38.90 to
   −$53.75 for the published rule A.
 
+## Latency and the guarantee (1 November)
+
+Unit tests (`tests/`, `make test`) found a gap in the guard's guarantee. Without latency, |q| ≤ Q at one decision
+implies it at the next. With latency, the outgoing quote (cancel not yet landed) and the incoming one were both sized
+against the same inventory, and both can fill. On an adversarial tape where every posted bid fills, with 1 s latency:
+
+| α | 0.05 | 0.2 | 0.4 | 0.5 | 0.7 | 1.0 (hard cap) |
+|---|---|---|---|---|---|---|
+| Largest position, plain barrier (Q = 0.01) | 0.0084 | 0.0097 | 0.0103 | 0.0105 | 0.0107 | 0.0110 |
+| Largest position, in-flight barrier | 0.0082 | 0.0096 | 0.0098 | 0.0099 | 0.0099 | 0.0100 |
+
+At the published α = 0.2 each quote takes only a fraction of the room left, which is why no latency run breached; it
+is not a guarantee. `make_cbf(alpha, inflight=True)` sizes each side from q plus the size still in flight, and the
+guarantee then holds for any α while latency is at most one decision interval (proof in the write-up). Rerun on the
+real recordings with 1 s latency (`stress.py lat1000i`), it was as good as or better than the plain barrier for 22 of
+24 policy-recording pairs (mean +$0.45 on recordings 2–3, +$1.06 on recording 4) with about 3% less inventory.
+
+Pooled over all held-out data (recordings 2–4, 49 complete hours), the guard-trained policy lost $0.78 ± 0.37 an hour:
+level with the simple bot (+$0.09/h, t = 0.2) and ahead of the textbook bot (+$2.56/h, t = 5.2), with 3.0 orders of
+mean inventory against 7.6 for both baselines.
+
 ## Method
 
 **Data.** `tools/record_l3.py` records Bitfinex's raw book (every order by id), every trade, and the exchange's own
@@ -197,7 +223,7 @@ The guard leaves the policy alone while these hold, shrinks the risky side near 
 ## Limits
 
 - About 57 hours of one thin market (roughly one trade every three to four seconds, median trade under $20).
-- No market impact, no latency, zero fees. The learned policy often improves the best price by one tick; real competitors would respond.
+- No market impact and zero fees in the main tables (latency and fees are in the stress tests). The learned policy often improves the best price by one tick; real competitors would respond.
 - Training profit rose from $3 to $8 over generations while validation stayed near $2–2.5, so the policy overfits and an early generation was kept.
 - The test comparison was run once by mistake while training was in progress. Nothing was changed afterwards; generations were chosen on validation data only.
 - Arrival order within a price level is inferred from the feed, not confirmed by the exchange.
@@ -205,15 +231,14 @@ The guard leaves the policy alone while these hold, shrinks the risky side near 
 ## Run
 
 ```
-python3 tools/record_l3.py data/btcusd_l3.csv 12           # recording 1 (needs websocket-client)
-python3 tools/record_l3.py data/btcusd_l3_part2.csv 12     # recording 2
-python3 baselines.py                                       # tune and test Avellaneda-Stoikov on recording 1
-python3 learn.py unguarded none && python3 learn.py capped cap && python3 learn.py cbf cbf
-python3 compare.py                                         # the table above
-for s in 1 2 3 4 5; do python3 learn.py cbf_s$s cbf $s; python3 learn.py none_s$s none $s; done   # run inside seeds/
-for s in base lat250 lat1000 through; do python3 stress.py $s; done
-python3 volguard.py && python3 volguard.py 1000
+pip install -r requirements.txt
+make test       # 27 unit tests on synthetic books, under a second, no data needed
+make check      # the published recording-2 numbers (2,444 fills / +$3.487 simple, +$5.704 guarded policy)
+make results    # every table here and in the write-up, from the recordings and the saved policies
+make retrain    # retrain the published policies and seeds (slow)
+python3 tools/writeup_pdf.py    # rebuild WRITEUP.pdf from WRITEUP.md (needs Chrome and the markdown package)
 ```
 
-Needs Python 3 with numpy, pandas and sortedcontainers. Recordings are not in the repository (about 180 MB).
-The trained policies used for the table are in `policy_*.json`.
+Recordings are made with `python3 tools/record_l3.py data/btcusd_l3_partN.csv <hours>` (needs websocket-client) and
+are not in the repository (about 1 GB). The trained policies used for the tables are in `policy_*.json`, `seeds/` and
+`seeds_hist/`.

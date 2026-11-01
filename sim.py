@@ -246,23 +246,37 @@ def hard_cap(tr, state, bid, ask):
     return bid, ask, tr.size, tr.size
 
 
-def make_cbf(alpha=0.2):
+def in_flight(tr, side, ts):
+    """Size on one side that can still fill whatever we decide now: a quote not yet live, or one whose cancel has
+    not landed. With latency the guard must count it, or two quotes sized against the same inventory can both fill."""
+    return sum(q.rem for q in (tr.old[side], tr.q[side]) if q is not None and q.rem > 0 and q.dead > ts)
+
+
+def cbf_sizes(tr, Q, q, alpha, ts, inflight):
+    """Largest bid and ask sizes that keep h = Q^2 - q^2 >= 0 if everything posted on one side fills.
+    inflight: start from the worst case after the in-flight quotes fill (needed for the guarantee under latency)."""
+    qb = q + in_flight(tr, 1, ts) if inflight else q
+    qa = q - in_flight(tr, -1, ts) if inflight else q
+    sb = min(tr.size, int(math.sqrt(max(alpha * Q * Q + (1 - alpha) * qb * qb, 0.0)) - qb)) if qb < Q else 0
+    sa = min(tr.size, int(math.sqrt(max(alpha * Q * Q + (1 - alpha) * qa * qa, 0.0)) + qa)) if qa > -Q else 0
+    if sb < tr.size or sa < tr.size: tr.overrides += 1
+    return max(sb, 0), max(sa, 0)
+
+
+def make_cbf(alpha=0.2, inflight=False):
     """Control barrier function on inventory. Safe set: h(q) = Q^2 - q^2 >= 0.
     Discrete-time condition h(q_next) >= (1 - alpha) h(q), enforced against the worst case that the whole
     posted size on one side fills before the next decision:
         bid size <= sqrt(alpha Q^2 + (1 - alpha) q^2) - q      ask size <= sqrt(alpha Q^2 + (1 - alpha) q^2) + q
     The guard changes nothing while the desired size already satisfies this (minimal intervention), shrinks
-    the risky side as inventory nears the limit, and guarantees |q| <= Q. alpha = 1 is the plain hard cap."""
+    the risky side as inventory nears the limit, and guarantees |q| <= Q with no latency. alpha = 1 is the plain
+    hard cap. With latency the guarantee needs inflight=True (q replaced by q plus the in-flight size)."""
     def guard(tr, state, bid, ask):
-        Q, q = tr.max_inv, tr.inv
-        bound = math.sqrt(alpha * Q * Q + (1 - alpha) * q * q)
-        sb, sa = min(tr.size, int(bound - q)), min(tr.size, int(bound + q))
-        if sb < tr.size or sa < tr.size: tr.overrides += 1
-        return bid, ask, max(sb, 0), max(sa, 0)
+        return (bid, ask) + cbf_sizes(tr, tr.max_inv, tr.inv, alpha, state["ts"], inflight)
     return guard
 
 
-def make_cbf_vol(alpha=0.2, ref_sd=None, floor=0.5):
+def make_cbf_vol(alpha=0.2, ref_sd=None, floor=0.5, inflight=False):
     """Volatility-aware barrier: the same safe set h = Qe^2 - q^2 >= 0, but the limit Qe shrinks when the market
     is jumpier than usual, Qe = Q * clip(ref_sd / sd, floor, 1), sd = rolling std of one-second mid changes.
     When Qe falls below |q| the bound only lets the position shrink (the risky side is cut to zero), so the guard
@@ -270,10 +284,5 @@ def make_cbf_vol(alpha=0.2, ref_sd=None, floor=0.5):
     def guard(tr, state, bid, ask):
         sd = math.sqrt(state["var"]); Q = tr.max_inv
         if ref_sd and sd > 0: Q = Q * min(1.0, max(floor, ref_sd / sd))
-        q = tr.inv
-        bound = math.sqrt(max(alpha * Q * Q + (1 - alpha) * q * q, 0.0))
-        sb = min(tr.size, int(bound - q)) if q < Q else 0
-        sa = min(tr.size, int(bound + q)) if q > -Q else 0
-        if sb < tr.size or sa < tr.size: tr.overrides += 1
-        return bid, ask, max(sb, 0), max(sa, 0)
+        return (bid, ask) + cbf_sizes(tr, Q, tr.inv, alpha, state["ts"], inflight)
     return guard

@@ -5,6 +5,7 @@ Scenarios:  base       the published setting (no latency, queue-aware fills)
             lat250     quotes, re-prices and cancels land 250 ms after the decision
             lat1000    the same with 1 second
             through    pessimistic queue: we fill only when a trade prints through our price
+            lat250i, lat1000i   latency as above, with the barrier guard counting in-flight quotes (make_cbf inflight=True)
 Fees are applied afterwards (maker fee x traded notional), so every scenario also gets 1 and 2 bps columns.
 
 Bots: simple, textbook (tuned on recording 1, as in compare.py), the published learned policies, and every
@@ -19,9 +20,11 @@ from sim import Market, Trader, touch, make_as, hard_cap, make_cbf
 from learn import Population, REC1
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SCEN = {"base": {}, "lat250": dict(latency_ms=250), "lat1000": dict(latency_ms=1000), "through": dict(through_only=True)}
+SCEN = {"base": {}, "lat250": dict(latency_ms=250), "lat1000": dict(latency_ms=1000), "through": dict(through_only=True),
+        "lat250i": dict(latency_ms=250), "lat1000i": dict(latency_ms=1000)}
 scen = sys.argv[1]
 recs = sys.argv[2:] or [f"{HERE}/data/btcusd_l3_part2.csv", f"{HERE}/data/btcusd_l3_part3.csv"]
+cbf = lambda: make_cbf(0.2, inflight=scen.endswith("i"))
 tag = "" if len(sys.argv) <= 2 else "_" + "+".join(os.path.basename(r).replace(".csv", "") for r in recs)
 
 
@@ -47,14 +50,14 @@ def bots():
         p = Population([weights], guard); pops.append(p); out.append((label, p.traders[0], None))
     pub = {n: json.load(open(f"{HERE}/policy_{n}.json"))["weights"] for n in ("unguarded", "cbf")}
     add("published: no guard", pub["unguarded"], None)
-    add("published: no-guard policy + guard", pub["unguarded"], make_cbf(0.2))
-    add("published: guard in training", pub["cbf"], make_cbf(0.2))
+    add("published: no-guard policy + guard", pub["unguarded"], cbf())
+    add("published: guard in training", pub["cbf"], cbf())
     for f in sorted(glob.glob(f"{HERE}/seeds/policy_cbf_s*.json") + glob.glob(f"{HERE}/seeds/policy_none_s*.json")):
         tag = os.path.basename(f)[7:-5]; w = json.load(open(f))["weights"]
-        if tag.startswith("cbf"): add(f"seed {tag[-1]}: guard in training", w, make_cbf(0.2))
+        if tag.startswith("cbf"): add(f"seed {tag[-1]}: guard in training", w, cbf())
         else:
             add(f"seed {tag[-1]}: no guard", w, None)
-            add(f"seed {tag[-1]}: no-guard policy + guard", w, make_cbf(0.2))
+            add(f"seed {tag[-1]}: no-guard policy + guard", w, cbf())
     return out, pops
 
 
