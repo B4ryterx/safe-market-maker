@@ -191,6 +191,28 @@ Pooled over all held-out data (recordings 2–4, 49 complete hours), the guard-t
 level with the simple bot (+$0.09/h, t = 0.2) and ahead of the textbook bot (+$2.56/h, t = 5.2), with 3.0 orders of
 mean inventory against 7.6 for both baselines.
 
+## A rough forex test (1 November)
+
+`fx_bars.py`: EURUSD, GBPUSD and USDJPY on Dukascopy 1-minute bars with a spread per bar (July to October 2026; last
+40%, 32 trading days, is the test, run once). There are no orders, trades or queue here, so this is far weaker than the
+Bitcoin test: quotes rest for a whole minute, a fill needs the opposite price to reach the quote, and a bar cannot show
+which side came first, so each result is a range from optimistic to pessimistic. No fees. Five seeds per pair.
+
+| Pair | Simple: bps of volume | Textbook | Learned + guard | Learned's volume vs simple's | Mean inventory, learned / simple (orders) |
+|---|---|---|---|---|---|
+| EURUSD | −0.19 to −0.57 | −0.40 to −0.44 | −0.24 to −0.41 | 4–9% | 0.6 / 5.2 |
+| GBPUSD | −0.27 to −0.55 | −0.24 to −0.27 | −0.26 to −0.48 | 3–4% | 0.6 / 5.3 |
+| USDJPY | −0.20 to −0.68 | −0.21 to −0.25 | −0.42 to −0.78 | 1–3% | 0.7 / 5.2 |
+
+- **No bot made money** on any pair, even in the optimistic range with no fees.
+- **The learned policy lost far less in total only because it barely trades.** Per dollar traded it is no better.
+- **The guard was not tested here.** The learned policies stayed well inside the limit with or without it (largest
+  position 5 to 7 orders), so it changed almost nothing.
+- The first version of the fill rule counted any dip in the bid as a fill, and training reported large profits, most of them
+  around the daily rollover (20:00–23:00 UTC), when spreads widen and nobody is trading. That was found and fixed on training data, before
+  the test period was run. One-minute quotes overstate adverse selection, so this does not show that forex market making
+  cannot work, only that nothing here shows it can. A real test needs tick data at the least.
+
 ## Method
 
 **Data.** `tools/record_l3.py` records Bitfinex's raw book (every order by id), every trade, and the exchange's own
