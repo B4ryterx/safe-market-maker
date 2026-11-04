@@ -39,7 +39,7 @@ class Bars:
         mins = time.hour * 60 + time.minute
         self.quiet = np.asarray((mins >= 20 * 60 + 55) & (mins < 22 * 60 + 5))
         d = np.diff(self.o + self.s / 2, prepend=self.o[0] + self.s[0] / 2)
-        self.sd = pd.Series(d).rolling(60, min_periods=2).std().shift(1).fillna(0.0).to_numpy()
+        self.sd = pd.Series(d).rolling(60, min_periods=2).std().shift(1).fillna(0.0).to_numpy(copy=True)   # copy: pandas 3 returns a read-only view
         self.mom = self.o - np.r_[np.full(10, self.o[0]), self.o[:-10]] if self.n > 10 else np.zeros(self.n)
         self.u = max(float(np.median(self.h - self.l)), point)   # the pair's scale: a typical bar's range
 
